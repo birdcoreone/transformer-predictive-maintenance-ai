@@ -1,0 +1,35 @@
+{
+    "Manual Entry": {},
+    "Critical Transformer": {
+        "Hydrogen": 10.0,
+        "Oxygen": 254.0,
+        "Nitrogen": 56500.0,
+        "Methane": 4.0,
+        "CO": 71.0,
+        "CO2": 1020.0,
+        "Ethylene": 0.0,
+        "Ethane": 108.0,
+        "Acetylene": 0.0,
+        "DBDS": 0.0,
+        "Power_factor": 1.0,
+        "Interfacial_V": 32.0,
+        "Dielectric_rigidity": 53.0,
+        "Water_content": 22.0
+    },
+    "Poor Transformer": {
+        "Hydrogen": 95.0,
+        "Oxygen": 1760.0,
+        "Nitrogen": 80800.0,
+        "Methane": 72.0,
+        "CO": 488.0,
+        "CO2": 3050.0,
+        "Ethylene": 10.0,
+        "Ethane": 36.0,
+        "Acetylene": 0.0,
+        "DBDS": 176.0,
+        "Power_factor": 0.29,
+        "Interfacial_V": 44.0,
+        "Dielectric_rigidity": 55.0,
+        "Water_content": 12.0
+    }
+}

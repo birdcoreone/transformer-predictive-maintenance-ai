@@ -1,0 +1,30 @@
+{
+    "model_name": "SMOTE XGBoost",
+    "project_name": "GridGuard AI",
+    "class_mapping": {
+        "0": "Critical",
+        "1": "Poor",
+        "2": "Good",
+        "3": "Excellent"
+    },
+    "feature_names": [
+        "Hydrogen",
+        "Oxygen",
+        "Nitrogen",
+        "Methane",
+        "CO",
+        "CO2",
+        "Ethylene",
+        "Ethane",
+        "Acetylene",
+        "DBDS",
+        "Power_factor",
+        "Interfacial_V",
+        "Dielectric_rigidity",
+        "Water_content"
+    ],
+    "test_accuracy": 0.9574,
+    "test_macro_f1": 0.4514,
+    "developer": "Teddy Boamah",
+    "test_weighted_f1": 0.9478416067421557
+}
