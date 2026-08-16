@@ -1,23 +1,26 @@
-"""Explainable AI page for GridGuard AI."""
+"""SHAP-based diagnostic explanation for GridGuard AI assessment results.
 
-import streamlit as st
+In v2, explainability is embedded directly within the transformer
+assessment result rather than presented as a separate application page.
+SHAP is used as the single explanation method for deployed assessments.
+"""
+
 import matplotlib.pyplot as plt
 import shap
+import streamlit as st
 
 from utils.explainability import (
-    create_lime_explainer,
-    generate_lime_explanation,
     generate_shap_explanation,
-    lime_explanation_to_dataframe,
     shap_explanation_to_dataframe,
 )
+
 
 def generate_shap_interpretation(
     shap_df,
     predicted_class: str,
     confidence: float,
 ) -> str:
-    """Create a plain-language summary of the SHAP explanation."""
+    """Create a concise engineering interpretation of SHAP contributions."""
 
     supporting_features = (
         shap_df[shap_df["Impact Score"] > 0]
@@ -27,177 +30,57 @@ def generate_shap_interpretation(
 
     opposing_features = (
         shap_df[shap_df["Impact Score"] < 0]
+        .sort_values("Impact Score")
         .head(3)["Measurement"]
         .tolist()
     )
 
-    supporting_text = (
-        ", ".join(supporting_features)
-        if supporting_features
-        else "no individual measurement strongly supported the prediction"
-    )
+    if supporting_features:
+        supporting_text = ", ".join(supporting_features)
+    else:
+        supporting_text = "no single measurement dominated the prediction"
 
-    opposing_text = (
-        ", ".join(opposing_features)
-        if opposing_features
-        else "no major measurement opposed the prediction"
-    )
+    if opposing_features:
+        opposing_text = ", ".join(opposing_features)
+    else:
+        opposing_text = "no major measurement strongly opposed the prediction"
 
     return (
-        f"The AI model classified this transformer as "
-        f"**{predicted_class}** with an overall confidence of "
-        f"**{confidence * 100:.2f}%**. "
-
-        f"The measurements with the greatest positive influence "
-        f"on this prediction were **{supporting_text}**. "
-
-        f"The measurements that reduced the prediction score "
-        f"were **{opposing_text}**. "
-
-        f"These SHAP contributions provide a transparent explanation "
-        f"of how the model reached its prediction for this "
-        f"transformer assessment."
+        f"The transformer was classified as **{predicted_class}** with "
+        f"**{confidence * 100:.2f}% model confidence**. "
+        f"The strongest measurements supporting this classification were "
+        f"**{supporting_text}**. Measurements exerting the strongest "
+        f"influence away from this classification were **{opposing_text}**. "
+        f"These contributions describe how the measured transformer "
+        f"conditions influenced the model's assessment."
     )
 
 
-def render_explainable_ai(
-    model,
+def _get_predicted_class_index(
     metadata,
-    shap_explainer,
-    lime_reference_data,
-):
-    """Render explanations for the latest transformer assessment."""
-   
-
-    st.title("Explainable AI")
-
-    st.caption(
-        "Understand the factors that influenced the latest "
-        "transformer health prediction."
-        
-    )
-
-    result = st.session_state.get("assessment_result")
-
-    if result is None:
-        st.warning(
-            "No transformer assessment is available. "
-            "Please complete an assessment first."
-        )
-        return
-
-    input_data = result["input_data"]
-    predicted_class = result["predicted_class"]
-    confidence = result["confidence"]
-
-    st.success(
-        "The latest transformer assessment has been loaded "
-        "successfully."
-    )
-
-    summary_left, summary_right = st.columns(2)
-
-    with summary_left:
-        st.metric(
-            label="Latest Predicted Health Status",
-            value=predicted_class,
-        )
-
-    with summary_right:
-        st.metric(
-            label="Model Confidence",
-            value=f"{confidence * 100:.2f}%",
-        )
-
-    with st.expander(
-        "View measurements being explained",
-        expanded=False,
-    ):
-        st.dataframe(
-            input_data.T.rename(
-                columns={0: "Measured Value"}
-            ),
-            use_container_width=True,
-        )
-
-    lime_explainer = create_lime_explainer(
-        lime_reference_data
-    )
-    
+    predicted_class: str,
+) -> int:
+    """Resolve the model class index for the predicted health status."""
 
     class_mapping = {
         int(class_id): class_name
-        for class_id, class_name
-        in metadata["class_mapping"].items()
+        for class_id, class_name in metadata["class_mapping"].items()
     }
 
-    predicted_class_index = next(
+    return next(
         class_id
-        for class_id, class_name
-        in class_mapping.items()
+        for class_id, class_name in class_mapping.items()
         if class_name == predicted_class
     )
-    
 
-    lime_explanation = generate_lime_explanation(
-        lime_explainer=lime_explainer,
-        model=model,
-        input_data=input_data,
-        predicted_class=predicted_class_index,
-        num_features=10,
-    )
-    
 
-    lime_df = lime_explanation_to_dataframe(
-        explanation=lime_explanation,
-        predicted_class=predicted_class_index,
-    )
-    
+def _create_waterfall_explanation(
+    shap_explanation,
+    input_data,
+    predicted_class_index: int,
+):
+    """Create a single-class SHAP explanation for the waterfall plot."""
 
-    st.divider()
-
-    st.markdown("## LIME Local Explanation")
-
-    st.caption(
-        "The table shows the features that most strongly supported "
-        "or opposed the latest prediction."
-    )
-
-    st.dataframe(
-        lime_df[
-            [
-                "Feature Condition",
-                "Contribution",
-                "Direction",
-            ]
-        ],
-        use_container_width=True,
-        hide_index=True,
-    )
-
-    shap_explanation = generate_shap_explanation(
-        shap_explainer=shap_explainer,
-        input_data=input_data,
-    )
-
-    shap_df = shap_explanation_to_dataframe(
-        explanation=shap_explanation,
-        predicted_class_index=predicted_class_index,
-        feature_names=input_data.columns.tolist(),
-    )
-
-    st.divider()
-
-    st.markdown("## SHAP Local Explanation")
-
-    st.caption(
-        "SHAP shows how each transformer measurement pushed the model "
-        "toward or away from the predicted health class."
-    )
-
-    # ---------------------------------------------------------
-    # PREPARE WATERFALL EXPLANATION
-    # ---------------------------------------------------------
     shap_values = shap_explanation.values
     base_values = shap_explanation.base_values
 
@@ -207,7 +90,6 @@ def render_explainable_ai(
             :,
             predicted_class_index,
         ]
-
         selected_base_value = base_values[
             0,
             predicted_class_index,
@@ -229,8 +111,7 @@ def render_explainable_ai(
             f"Unexpected SHAP values shape: {shap_values.shape}"
         )
 
-
-    waterfall_explanation = shap.Explanation(
+    return shap.Explanation(
         values=selected_shap_values,
         base_values=selected_base_value,
         data=input_data.iloc[0].values,
@@ -238,25 +119,71 @@ def render_explainable_ai(
     )
 
 
-    # ---------------------------------------------------------
-    # WATERFALL PLOT AND FEATURE TABLE
-    # ---------------------------------------------------------
+def render_explanation_section(
+    model,
+    metadata,
+    shap_explainer,
+) -> None:
+    """Render the SHAP explanation for the current assessment."""
+
+    result = st.session_state["assessment_result"]
+
+    input_data = result["input_data"]
+    predicted_class = result["predicted_class"]
+    confidence = result["confidence"]
+
+    st.markdown("### Diagnostic Influence Analysis")
+
+    st.write(
+        "This section shows which transformer measurements had the "
+        "greatest influence on the predicted health condition."
+    )
+
+    with st.expander(
+        "View measurements used for this assessment",
+        expanded=False,
+    ):
+        st.dataframe(
+            input_data.T.rename(columns={0: "Measured Value"}),
+            use_container_width=True,
+        )
+
+    predicted_class_index = _get_predicted_class_index(
+        metadata=metadata,
+        predicted_class=predicted_class,
+    )
+
+    shap_explanation = generate_shap_explanation(
+        shap_explainer=shap_explainer,
+        input_data=input_data,
+    )
+
+    shap_df = shap_explanation_to_dataframe(
+        explanation=shap_explanation,
+        predicted_class_index=predicted_class_index,
+        feature_names=input_data.columns.tolist(),
+    )
+
+    waterfall_explanation = _create_waterfall_explanation(
+        shap_explanation=shap_explanation,
+        input_data=input_data,
+        predicted_class_index=predicted_class_index,
+    )
+
     plot_column, table_column = st.columns(
-        [1.25, 1],
+        [1.35, 1],
         gap="large",
     )
 
     with plot_column:
-        st.markdown("### Prediction Waterfall")
+        st.markdown("#### Measurement Influence")
 
         st.caption(
-            "Red features increase the model score for the predicted "
-            "class, while blue features reduce it."
+            "Red measurements increased support for the predicted "
+            "health class, while blue measurements reduced it."
         )
 
-        fig, axis = plt.subplots(
-            figsize=(10, 7)
-        )
+        fig, _ = plt.subplots(figsize=(10, 7))
 
         shap.plots.waterfall(
             waterfall_explanation,
@@ -271,13 +198,11 @@ def render_explainable_ai(
 
         plt.close(fig)
 
-
     with table_column:
-        st.markdown("### Top SHAP Features")
+        st.markdown("#### Most Influential Measurements")
 
         st.caption(
-            "The ten measurements with the strongest influence on "
-            "the latest prediction."
+            "Measurements ranked by their contribution to this assessment."
         )
 
         shap_display_df = shap_df[
@@ -298,11 +223,7 @@ def render_explainable_ai(
             hide_index=True,
         )
 
-
-    # ---------------------------------------------------------
-    # PLAIN-LANGUAGE INTERPRETATION
-    # ---------------------------------------------------------
-    st.markdown("### Explanation Summary")
+    st.markdown("### Engineering Interpretation")
 
     interpretation = generate_shap_interpretation(
         shap_df=shap_df,
@@ -311,3 +232,10 @@ def render_explainable_ai(
     )
 
     st.info(interpretation)
+
+    st.caption(
+        "SHAP explanations describe the influence of individual "
+        "measurements on the model prediction. They should be considered "
+        "alongside standard transformer diagnostic procedures and "
+        "professional engineering judgment."
+    )
